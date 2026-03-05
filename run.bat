@@ -1,0 +1,9 @@
+@echo off
+echo Cài đặt môi trường ảo (Virtual Environment)...
+python -m venv venv
+call venv\Scripts\activate.bat
+echo Cài đặt các thư viện cần thiết...
+pip install -r requirements.txt
+echo Đang chạy Server Proxy...
+python main.py
+pause
