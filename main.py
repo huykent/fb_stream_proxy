@@ -158,24 +158,39 @@ async def index():
 @app.get("/api/extract")
 async def extract_url(url: str):
     ydl_opts = {
-        'format': 'bestvideo+bestaudio/best/b',
+        'format': 'best/bestvideo+bestaudio',
         'quiet': True,
-        'no_warnings': True
+        'no_warnings': True,
+        'live_from_start': True,
+        'nocheckcertificate': True,
+        'ignoreerrors': False,
+        'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None
     }
+    import os
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
-            stream_url = info.get('url', '')
-            if not stream_url and 'formats' in info and len(info['formats']) > 0:
-                # Find the best format, usually the last one or one with 'url'
-                stream_url = info['formats'][-1].get('url', '')
+            
+            # Ưu tiên lấy url trực tiếp, nếu không có thì tìm trong formats
+            stream_url = info.get('url')
+            if not stream_url and 'formats' in info:
+                # Với livestream, ưu tiên format có chứa 'manifest' hoặc hls/dash
+                valid_formats = [f for f in info['formats'] if f.get('url')]
+                if valid_formats:
+                    # Sắp xếp để lấy cái tốt nhất (thường là cuối danh sách)
+                    stream_url = valid_formats[-1].get('url')
                 
             if not stream_url:
-                raise Exception("Không tìm thấy link stream từ video này. Có thể video bị ẩn hoặc yêu cầu đăng nhập.")
+                raise Exception("Không thể trích xuất liên kết luồng. Video có thể là riêng tư hoặc yêu cầu đăng nhập.")
                 
-            # Check if it's HLS (m3u8) or DASH (mpd)
-            is_hls = '.m3u8' in stream_url.lower() or info.get('protocol') in ['m3u8', 'm3u8_native']
-            is_dash = '.mpd' in stream_url.lower() or info.get('protocol') in ['dash', 'dash_native'] or 'dash' in stream_url.lower()
+            # Xác định loại luồng
+            is_hls = '.m3u8' in stream_url.lower() or info.get('protocol') in ['m3u8', 'm3u8_native'] or info.get('ext') == 'm3u8'
+            is_dash = '.mpd' in stream_url.lower() or info.get('protocol') in ['dash', 'dash_native'] or 'dash' in stream_url.lower() or info.get('ext') == 'mpd'
+            
+            # Một số livestream FB trả về protocol là 'https' nhưng thực tế là m3u8/dash
+            if not is_hls and not is_dash:
+                if 'live' in info.get('protocol', '').lower() or info.get('is_live'):
+                    is_hls = True # Giả định là HLS nếu là live mà không rõ protocol
             
             return {
                 "success": True, 
