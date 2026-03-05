@@ -126,8 +126,20 @@ html_content = """
                 videoWrapper.appendChild(videoEl);
                 videoWrapper.style.display = 'block';
 
-                // Initialize Video.js
-                videojs(videoEl);
+                // Initialize Video.js với cấu hình tối ưu Livestream
+                videojs(videoEl, {
+                    liveui: true,
+                    fluid: true,
+                    html5: {
+                        dash: {
+                            setFastSwitchEnabled: true,
+                        }
+                    }
+                }, function() {
+                    if (data.is_live) {
+                        this.addClass('vjs-live');
+                    }
+                });
             } catch (err) {
                 loading.style.display = 'none';
                 errorMsg.textContent = err.message;
@@ -170,6 +182,7 @@ async def extract_url(url: str):
                 "stream_url": stream_url,
                 "is_hls": is_hls,
                 "is_dash": is_dash,
+                "is_live": info.get('is_live', False),
                 "title": info.get('title', 'Facebook Video')
             }
     except Exception as e:
@@ -192,6 +205,25 @@ async def proxy_video(request: Request, url: str):
     
     req = requests.get(url, headers=headers, stream=True)
     
+    # Sửa lỗi DASH relative path cho file MPD
+    if ".mpd" in url.lower():
+        content = req.text
+        # Trích xuất đường dẫn thư mục cha của file MPD
+        base_url = url.split("?")[0].rsplit("/", 1)[0] + "/"
+        
+        import re
+        # Chèn thẻ BaseURL tuyệt đối ngay sau thẻ MPD để dash.js nối đúng link CDN thay vì link localhost
+        if "<BaseURL>" not in content:
+            content = re.sub(r'(<MPD[^>]*>)', r'\1\n  <BaseURL>' + base_url + '</BaseURL>', content, count=1)
+            
+        resp_headers = {
+            "Access-Control-Allow-Origin": "*",
+            "Content-Type": "application/dash+xml",
+            "Access-Control-Expose-Headers": "Content-Range, Accept-Ranges, Content-Length"
+        }
+        from fastapi import Response
+        return Response(content=content, media_type="application/dash+xml", headers=resp_headers)
+    
     resp_headers = {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Headers": "Range",
@@ -213,4 +245,4 @@ async def proxy_video(request: Request, url: str):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=9000)
