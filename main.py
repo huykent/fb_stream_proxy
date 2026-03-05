@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.templating import Jinja2Templates
 import yt_dlp
 import requests
+import os
 
 app = FastAPI()
 
@@ -166,7 +167,6 @@ async def extract_url(url: str):
         'ignoreerrors': False,
         'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None
     }
-    import os
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
